@@ -1,12 +1,13 @@
+// server.js
+import express from 'express';
+import { createServer } from 'http';
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
 import { makeExecutableSchema } from '@graphql-tools/schema';
-import express from 'express';
-import { createServer } from 'http';
+import bodyParser from 'body-parser';
+import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { useServer } from 'graphql-ws/lib/use/ws';
-import cors from 'cors';
-import bodyParser from 'body-parser';
 import { PubSub } from 'graphql-subscriptions';
 
 const typeDefs = `
@@ -22,29 +23,26 @@ const typeDefs = `
   }
 
   type Mutation {
-    sendMessage(text: String!, user: String!): Message!
+    sendMessage(user: String!, text: String!): Message!
     updateMessage(id: ID!, text: String!): Message!
     deleteMessage(id: ID!): ID!
   }
 
   type Subscription {
     messageSent: Message!
-    messageUpdated: Message!
-    messageDeleted: ID!
   }
 `;
 
-const messages = []; // in-memory DB
+const messages = [];
 const pubsub = new PubSub();
-
-let nextId = 1; // incremental ID
+let nextId = 1;
 
 const resolvers = {
   Query: {
     messages: () => messages,
   },
   Mutation: {
-    sendMessage: (_, { text, user }) => {
+    sendMessage: (_, { user, text }) => {
       const message = {
         id: String(nextId++),
         text,
@@ -59,26 +57,18 @@ const resolvers = {
       const msg = messages.find(m => m.id === id);
       if (!msg) throw new Error("Message not found");
       msg.text = text;
-      pubsub.publish('MESSAGE_UPDATED', { messageUpdated: msg });
-      return msg;
+      return msg; // only mutation, no subscription needed
     },
     deleteMessage: (_, { id }) => {
       const index = messages.findIndex(m => m.id === id);
       if (index === -1) throw new Error("Message not found");
       messages.splice(index, 1);
-      pubsub.publish('MESSAGE_DELETED', { messageDeleted: id });
       return id;
     },
   },
   Subscription: {
     messageSent: {
-      subscribe: () => pubsub.asyncIterableIterator(['MESSAGE_SENT']),
-    },
-    messageUpdated: {
-      subscribe: () => pubsub.asyncIterableIterator(['MESSAGE_UPDATED']),
-    },
-    messageDeleted: {
-      subscribe: () => pubsub.asyncIterableIterator(['MESSAGE_DELETED']),
+      subscribe: () => pubsub.asyncIterator(['MESSAGE_SENT']),
     },
   },
 };
@@ -87,7 +77,7 @@ const schema = makeExecutableSchema({ typeDefs, resolvers });
 const app = express();
 const httpServer = createServer(app);
 
-// WebSocket server for subscriptions
+// WebSocket for subscription (only new messages)
 const wsServer = new WebSocketServer({ server: httpServer, path: '/graphql' });
 useServer({ schema }, wsServer);
 
