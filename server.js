@@ -1,4 +1,4 @@
-// server.js
+
 import express from 'express';
 import { createServer } from 'http';
 import { ApolloServer } from '@apollo/server';
@@ -10,7 +10,7 @@ import { WebSocketServer } from 'ws';
 import { useServer } from 'graphql-ws/lib/use/ws';
 import { PubSub } from 'graphql-subscriptions';
 
-// GraphQL schema
+
 const typeDefs = `
   type User {
     id: ID!
@@ -39,18 +39,18 @@ const typeDefs = `
   }
 `;
 
-// Default users
+
 const users = [
   { id: '1', name: 'Saifullah' },
   { id: '2', name: 'MohammedAlith' }
 ];
 
-// In-memory messages store
+
 let messages = [];
 let nextId = 1;
 const pubsub = new PubSub();
 
-// Resolvers
+
 const resolvers = {
   Query: {
     messages: () => messages,
@@ -91,21 +91,25 @@ const resolvers = {
   }
 };
 
-// Create schema and server
+
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 const app = express();
 const httpServer = createServer(app);
 
-// WebSocket server for subscriptions
+
 const wsServer = new WebSocketServer({ server: httpServer, path: '/graphql' });
 useServer({ schema }, wsServer);
 
-// Apollo Server
+
 const server = new ApolloServer({ schema });
 await server.start();
 app.use('/graphql', cors(), bodyParser.json(), expressMiddleware(server));
+app.use(cors({
+  origin: ["http://localhost:3000", "https://chat-app-pink-five.vercel.app/"],
+ 
+}));
 
-// Start server
+
 httpServer.listen(4000, () => {
   console.log('Server running on http://localhost:4000/graphql');
   console.log('WebSocket URL for subscriptions: ws://localhost:4000/graphql');
